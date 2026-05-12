@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text } from 'react-native';
+  import { Pressable, StyleSheet, Text } from 'react-native';
 import { theme } from '@/themes';
 
 type AppButtonProps = {
