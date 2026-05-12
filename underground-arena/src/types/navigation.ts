@@ -1,4 +1,5 @@
 import type { PackType } from '@/services/cards/packSystem';
+import type { PostFightSummary } from '@/services/progression/postFight';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -10,7 +11,7 @@ export type RootStackParamList = {
   DeckBuilder: undefined;
   Fight: undefined;
   CombatDebug: undefined;
-  Rewards: undefined;
+  Rewards: { summary?: PostFightSummary } | undefined;
   Shop: undefined;
   Tournament: undefined;
   TrainingGym: undefined;

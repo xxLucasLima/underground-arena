@@ -1,7 +1,11 @@
+import { motion } from '@/themes/motion';
+
+/**
+ * Back-compat aliases. New code should import `motion` from `@/themes` instead.
+ * Kept here so existing imports of `animationDurations` keep compiling.
+ */
 export const animationDurations = {
-  fast: 180,
-  normal: 240,
-  slow: 320,
+  fast: motion.duration.fast,
+  normal: motion.duration.normal,
+  slow: motion.duration.slow,
 } as const;
-
-

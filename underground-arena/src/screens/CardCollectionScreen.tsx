@@ -8,6 +8,8 @@ import type { RootStackParamList } from '@/types/navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CardCollection'>;
 
+type RarityFilter = 'All' | 'Common' | 'Rare' | 'Epic' | 'Legendary';
+
 export function CardCollectionScreen({ navigation }: Props) {
   // Pull visibility-aware projection straight from the store.
   const owned = useCardsStore((s) => s.owned);
@@ -30,7 +32,11 @@ export function CardCollectionScreen({ navigation }: Props) {
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [ownedOnly, setOwnedOnly] = useState(false);
   const [hideUnseen, setHideUnseen] = useState(true);
-  const [rarity, setRarity] = useState<'All' | 'Common' | 'Rare' | 'Epic' | 'Legendary'>('All');
+  const [rarity, setRarity] = useState<RarityFilter>('All');
+  // The button stack used to dominate the screen on small devices. Hide it
+  // behind a toggle and surface a small "active filter" summary so the player
+  // can still tell at a glance what's filtering the list.
+  const [controlsOpen, setControlsOpen] = useState(false);
 
   const totals = useMemo(() => {
     let ownedC = 0;
@@ -49,7 +55,7 @@ export function CardCollectionScreen({ navigation }: Props) {
     [visible, hideUnseen],
   );
 
-  const applyFilters = (next: { favoritesOnly?: boolean; ownedOnly?: boolean; rarity?: typeof rarity }) => {
+  const applyFilters = (next: { favoritesOnly?: boolean; ownedOnly?: boolean; rarity?: RarityFilter }) => {
     const fav = next.favoritesOnly ?? favoritesOnly;
     const own = next.ownedOnly ?? ownedOnly;
     const rar = next.rarity ?? rarity;
@@ -59,30 +65,56 @@ export function CardCollectionScreen({ navigation }: Props) {
     setFilter({ favoritesOnly: fav, ownedOnly: own, rarity: rar === 'All' ? undefined : rar });
   };
 
+  const activeFilterCount =
+    (favoritesOnly ? 1 : 0) + (ownedOnly ? 1 : 0) + (rarity !== 'All' ? 1 : 0) + (hideUnseen ? 0 : 1);
+  const summaryParts: string[] = [];
+  if (favoritesOnly) summaryParts.push('★ favs');
+  if (ownedOnly) summaryParts.push('owned');
+  if (rarity !== 'All') summaryParts.push(rarity);
+  if (!hideUnseen) summaryParts.push('+unseen');
+  const summary = summaryParts.length > 0 ? summaryParts.join(' · ') : 'none';
+
   return (
     <ScreenContainer>
       <ScreenHeader title="Card Collection" />
-      <View style={styles.controls}>
-        <AppButton label="Sort: Strongest" onPress={() => setSort('strongest')} />
-        <AppButton label="Open Pack" onPress={() => navigation.navigate('PackOpening', { packType: 'Bronze' })} />
+      <View style={styles.toolbar}>
         <AppButton
-          label={favoritesOnly ? 'Favorites: ON' : 'Favorites: OFF'}
-          onPress={() => applyFilters({ favoritesOnly: !favoritesOnly })}
+          label={`${controlsOpen ? '▾' : '▸'} Filters & sort${
+            activeFilterCount > 0 ? ` (${activeFilterCount})` : ''
+          }`}
+          onPress={() => setControlsOpen((v) => !v)}
         />
-        <AppButton label={ownedOnly ? 'Owned Only: ON' : 'Owned Only: OFF'} onPress={() => applyFilters({ ownedOnly: !ownedOnly })} />
-        <AppButton
-          label={hideUnseen ? 'Show Unseen Silhouettes: OFF' : 'Show Unseen Silhouettes: ON'}
-          onPress={() => setHideUnseen((v) => !v)}
-        />
-        <AppButton
-          label={`Rarity: ${rarity}`}
-          onPress={() => {
-            const order: Array<typeof rarity> = ['All', 'Common', 'Rare', 'Epic', 'Legendary'];
-            const next = order[(order.indexOf(rarity) + 1) % order.length];
-            applyFilters({ rarity: next });
-          }}
-        />
+        {!controlsOpen ? <AppText>{`Filters: ${summary}`}</AppText> : null}
       </View>
+      {controlsOpen ? (
+        <View style={styles.controls}>
+          <AppButton label="Sort: Strongest" onPress={() => setSort('strongest')} />
+          <AppButton
+            label="Open Pack"
+            onPress={() => navigation.navigate('PackOpening', { packType: 'Bronze' })}
+          />
+          <AppButton
+            label={favoritesOnly ? 'Favorites: ON' : 'Favorites: OFF'}
+            onPress={() => applyFilters({ favoritesOnly: !favoritesOnly })}
+          />
+          <AppButton
+            label={ownedOnly ? 'Owned Only: ON' : 'Owned Only: OFF'}
+            onPress={() => applyFilters({ ownedOnly: !ownedOnly })}
+          />
+          <AppButton
+            label={hideUnseen ? 'Show Unseen Silhouettes: OFF' : 'Show Unseen Silhouettes: ON'}
+            onPress={() => setHideUnseen((v) => !v)}
+          />
+          <AppButton
+            label={`Rarity: ${rarity}`}
+            onPress={() => {
+              const order: RarityFilter[] = ['All', 'Common', 'Rare', 'Epic', 'Legendary'];
+              const next = order[(order.indexOf(rarity) + 1) % order.length];
+              applyFilters({ rarity: next });
+            }}
+          />
+        </View>
+      ) : null}
       <AppText>
         {`Owned ${totals.ownedC} • Discovered ${totals.discoveredC} • Unseen ${totals.unseenC} / Total ${totals.total}`}
       </AppText>
@@ -106,6 +138,7 @@ export function CardCollectionScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  toolbar: { gap: 6, marginBottom: 8 },
   controls: { gap: 8, marginBottom: 12 },
   list: { gap: 12, paddingBottom: 80 },
 });
