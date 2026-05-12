@@ -1,0 +1,6 @@
+0000000000000000000000000000000000000000 1945d7d5ff2a6d632cf1e33d3710e22d3c9299fc Lucas Lima <Lucas.Lima.Pinheiro@hotmail.com> 1778603434 -0300	commit (initial): Initial commit
+1945d7d5ff2a6d632cf1e33d3710e22d3c9299fc 1945d7d5ff2a6d632cf1e33d3710e22d3c9299fc Lucas Lima <Lucas.Lima.Pinheiro@hotmail.com> 1778605353 -0300	Branch: renamed refs/heads/master to refs/heads/main
+1945d7d5ff2a6d632cf1e33d3710e22d3c9299fc d2722ea464879b0fac9f1b44d3b8d9410280443a Lucas Lima <Lucas.Lima.Pinheiro@hotmail.com> 1778605499 -0300	commit: Phase 01 - Project setup and architecture
+d2722ea464879b0fac9f1b44d3b8d9410280443a 990693f9d36e46b67074d59045c237e0f5448778 Lucas Lima <Lucas.Lima.Pinheiro@hotmail.com> 1778614116 -0300	commit: Phase 02 - Card system and deck building
+990693f9d36e46b67074d59045c237e0f5448778 371c30041d5a931cccd882c3518daeecf78dce1a Lucas Lima <Lucas.Lima.Pinheiro@hotmail.com> 1778616962 -0300	commit: Phase 02 - Combat engine
+371c30041d5a931cccd882c3518daeecf78dce1a a582fed8437467e34f557cd9de13a7bd1743abb3 Lucas Lima <Lucas.Lima.Pinheiro@hotmail.com> 1778619466 -0300	commit: Phase 04 - Progression and Economy
