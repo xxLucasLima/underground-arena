@@ -6,4 +6,8 @@ export const storageKeys = {
   cards: 'ua.cards',
   rewards: 'ua.rewards',
   statistics: 'ua.statistics',
+  energy: 'ua.energy',
+  daily: 'ua.daily',
+  training: 'ua.training',
+  achievements: 'ua.achievements',
 } as const;

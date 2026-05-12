@@ -10,6 +10,7 @@ export function CardDetailsScreen({ route }: Props) {
   const { cardId } = route.params;
   const card = useCardsStore((s) => s.cards.find((c) => c.id === cardId));
   const owned = useCardsStore((s) => s.owned[cardId]);
+  const visibility = useCardsStore((s) => s.getVisibility(cardId));
   const toggleFavorite = useCardsStore((s) => s.toggleFavorite);
   const getUpgradeCost = useCardsStore((s) => s.getUpgradeCost);
 
@@ -18,6 +19,32 @@ export function CardDetailsScreen({ route }: Props) {
       <ScreenContainer>
         <ScreenHeader title="Card Details" />
         <AppText>Card not found.</AppText>
+      </ScreenContainer>
+    );
+  }
+
+  if (visibility === 'unseen') {
+    return (
+      <ScreenContainer>
+        <ScreenHeader title="Unknown Card" />
+        <AppText style={styles.dim}>This card hasn’t been discovered yet.</AppText>
+        <AppText style={styles.dim}>Keep fighting, opening packs, and completing achievements to find it.</AppText>
+      </ScreenContainer>
+    );
+  }
+
+  if (visibility === 'discovered') {
+    return (
+      <ScreenContainer>
+        <ScreenHeader title={card.name} />
+        <View style={styles.block}>
+          <AppText>{`Category: ${card.category}`}</AppText>
+          <AppText>{`Rarity: ${card.rarity}`}</AppText>
+          <AppText style={styles.dim}>Stats hidden until you collect this card.</AppText>
+        </View>
+        <View style={styles.block}>
+          <AppText style={styles.dim}>Sources: Packs, post-fight rewards, achievements.</AppText>
+        </View>
       </ScreenContainer>
     );
   }
@@ -47,4 +74,5 @@ export function CardDetailsScreen({ route }: Props) {
 
 const styles = StyleSheet.create({
   block: { gap: 8, marginBottom: 16 },
+  dim: { opacity: 0.7 },
 });

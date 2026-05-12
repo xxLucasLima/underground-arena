@@ -1,10 +1,28 @@
 import { create } from 'zustand';
 import { CARD_DEFINITIONS } from '@/data/cards';
+import { DISCOVERY_CONFIG } from '@/data/cards/discoveryConfig';
 import { getObject, setObject } from '@/services/persistence/storage';
 import { storageKeys } from '@/services/persistence/keys';
 import { applyCardFilters, applyCardSort, validateDeck } from '@/services/cards/cardUtils';
 import { openPack, type PackType } from '@/services/cards/packSystem';
-import type { CardDefinition, CardFilter, CardSort, DeckPreset, OwnedCard } from '@/types/cards';
+import {
+  createInitialDiscovery,
+  discoverByFightCount,
+  discoverByLevel,
+  discoverCards,
+  getCardVisibility,
+  projectCards,
+  type DiscoveryState,
+  type VisibleCard,
+} from '@/services/cards/discovery';
+import type {
+  CardDefinition,
+  CardFilter,
+  CardSort,
+  CardVisibility,
+  DeckPreset,
+  OwnedCard,
+} from '@/types/cards';
 
 type UpgradeCost = {
   coins: number;
@@ -14,6 +32,7 @@ type UpgradeCost = {
 type CardsState = {
   cards: CardDefinition[];
   owned: Record<string, OwnedCard>;
+  discovery: DiscoveryState;
   decks: DeckPreset[];
   packHistory: Array<{ pack: PackType; cardIds: string[]; openedAt: number }>;
   filter: CardFilter;
@@ -27,10 +46,20 @@ type CardsState = {
   canUpgradeCard: (cardId: string, coins: number) => { ok: boolean; reason?: string; cost: UpgradeCost };
   saveDeck: (deck: DeckPreset) => Promise<{ ok: boolean; reason?: string }>;
   openPackAndCollect: (pack: PackType) => Promise<string[]>;
-  getVisibleCards: () => CardDefinition[];
+  /** Reveal arbitrary cards (e.g. tutorial reward, achievement). */
+  discover: (ids: string[]) => Promise<string[]>;
+  /** Reveal everything unlocked at or below this level. */
+  discoverUpToLevel: (level: number) => Promise<string[]>;
+  /** Called by post-fight pipeline; deterministic drip based on totalFights. */
+  rollFightDiscoveries: (totalFights: number, playerLevel: number) => Promise<string[]>;
+  /** UI-facing: returns visibility-aware cards (filter & sort applied). */
+  getVisibleCards: () => VisibleCard[];
+  getVisibility: (cardId: string) => CardVisibility;
 };
 
-type CardsPersisted = Pick<CardsState, 'owned' | 'decks' | 'packHistory'>;
+type CardsPersisted = Pick<CardsState, 'owned' | 'decks' | 'packHistory'> & {
+  discovery: DiscoveryState;
+};
 
 const STARTER_DECK: DeckPreset = {
   id: 'starter',
@@ -39,16 +68,29 @@ const STARTER_DECK: DeckPreset = {
   updatedAt: Date.now(),
 };
 
-const initialOwned: Record<string, OwnedCard> = {
-  punch_jab_01: { cardId: 'punch_jab_01', quantity: 1, level: 1, favorite: false, acquiredAt: Date.now() },
-  kick_low_01: { cardId: 'kick_low_01', quantity: 1, level: 1, favorite: false, acquiredAt: Date.now() },
-  grapple_clinch_01: { cardId: 'grapple_clinch_01', quantity: 1, level: 1, favorite: false, acquiredAt: Date.now() },
-  defense_shell_01: { cardId: 'defense_shell_01', quantity: 1, level: 1, favorite: false, acquiredAt: Date.now() },
-};
+function buildInitialOwned(): Record<string, OwnedCard> {
+  const out: Record<string, OwnedCard> = {};
+  const now = Date.now();
+  DISCOVERY_CONFIG.initialOwnedIds.forEach((id) => {
+    out[id] = { cardId: id, quantity: 1, level: 1, favorite: false, acquiredAt: now };
+  });
+  return out;
+}
+
+async function persist(state: CardsState) {
+  const payload: CardsPersisted = {
+    owned: state.owned,
+    decks: state.decks,
+    packHistory: state.packHistory,
+    discovery: state.discovery,
+  };
+  await setObject(storageKeys.cards, payload);
+}
 
 export const useCardsStore = create<CardsState>((set, get) => ({
   cards: CARD_DEFINITIONS,
-  owned: initialOwned,
+  owned: buildInitialOwned(),
+  discovery: createInitialDiscovery(),
   decks: [STARTER_DECK],
   packHistory: [],
   filter: {},
@@ -57,7 +99,12 @@ export const useCardsStore = create<CardsState>((set, get) => ({
   hydrate: async () => {
     const persisted = await getObject<CardsPersisted>(storageKeys.cards);
     if (!persisted) return;
-    set({ owned: persisted.owned, decks: persisted.decks, packHistory: persisted.packHistory });
+    set({
+      owned: persisted.owned,
+      decks: persisted.decks,
+      packHistory: persisted.packHistory,
+      discovery: persisted.discovery ?? createInitialDiscovery(),
+    });
   },
 
   unlockCard: async (cardId, qty = 1) => {
@@ -66,8 +113,10 @@ export const useCardsStore = create<CardsState>((set, get) => ({
     owned[cardId] = current
       ? { ...current, quantity: current.quantity + qty }
       : { cardId, quantity: qty, level: 1, favorite: false, acquiredAt: Date.now() };
-    set({ owned });
-    await setObject(storageKeys.cards, { owned, decks: get().decks, packHistory: get().packHistory });
+    // Ensure ownership implies discovery — single source of truth in the service.
+    const discovery = discoverCards(get().discovery, [cardId]);
+    set({ owned, discovery });
+    await persist(get());
   },
 
   toggleFavorite: async (cardId) => {
@@ -75,7 +124,7 @@ export const useCardsStore = create<CardsState>((set, get) => ({
     if (!owned[cardId]) return;
     owned[cardId] = { ...owned[cardId], favorite: !owned[cardId].favorite };
     set({ owned });
-    await setObject(storageKeys.cards, { owned, decks: get().decks, packHistory: get().packHistory });
+    await persist(get());
   },
 
   setFilter: (filter) => set({ filter }),
@@ -102,9 +151,13 @@ export const useCardsStore = create<CardsState>((set, get) => ({
   saveDeck: async (deck) => {
     const validation = validateDeck(deck, get().cards);
     if (!validation.valid) return { ok: false, reason: validation.reason };
+    // Block decks containing un-owned cards (deck builder filters anyway).
+    const owned = get().owned;
+    const missing = deck.cardIds.find((id) => !owned[id]);
+    if (missing) return { ok: false, reason: 'Deck contains un-owned cards' };
     const decks = [...get().decks.filter((d) => d.id !== deck.id), { ...deck, updatedAt: Date.now() }];
     set({ decks });
-    await setObject(storageKeys.cards, { owned: get().owned, decks, packHistory: get().packHistory });
+    await persist(get());
     return { ok: true };
   },
 
@@ -117,14 +170,62 @@ export const useCardsStore = create<CardsState>((set, get) => ({
         ? { ...current, quantity: current.quantity + 1 }
         : { cardId: r.id, quantity: 1, level: 1, favorite: false, acquiredAt: Date.now() };
     });
+    const discovery = discoverCards(get().discovery, rewards.map((r) => r.id));
     const packHistory = [...get().packHistory, { pack, cardIds: rewards.map((r) => r.id), openedAt: Date.now() }];
-    set({ owned, packHistory });
-    await setObject(storageKeys.cards, { owned, decks: get().decks, packHistory });
+    set({ owned, packHistory, discovery });
+    await persist(get());
     return rewards.map((r) => r.id);
+  },
+
+  discover: async (ids) => {
+    const before = get().discovery.discoveredIds.length;
+    const discovery = discoverCards(get().discovery, ids);
+    set({ discovery });
+    await persist(get());
+    return discovery.discoveredIds.slice(before);
+  },
+
+  discoverUpToLevel: async (level) => {
+    const before = new Set(get().discovery.discoveredIds);
+    const discovery = discoverByLevel(get().discovery, get().cards, level);
+    set({ discovery });
+    await persist(get());
+    return discovery.discoveredIds.filter((id) => !before.has(id));
+  },
+
+  rollFightDiscoveries: async (totalFights, playerLevel) => {
+    const before = new Set(get().discovery.discoveredIds);
+    const discovery = discoverByFightCount(get().discovery, get().cards, totalFights, playerLevel);
+    if (discovery === get().discovery) return [];
+    set({ discovery });
+    await persist(get());
+    return discovery.discoveredIds.filter((id) => !before.has(id));
   },
 
   getVisibleCards: () => {
     const state = get();
-    return applyCardSort(applyCardFilters(state.cards, state.owned, state.filter), state.owned, state.sort);
+    // 1. Project all cards through the visibility service.
+    const projected = projectCards(state.cards, state.owned, state.discovery, { includeUnseen: true });
+    // 2. Apply existing filters (rarity / category / owned-only / favorites) to underlying definitions.
+    const filteredDefs = applyCardFilters(
+      projected.map((p) => p.card),
+      state.owned,
+      state.filter,
+    );
+    const filteredIds = new Set(filteredDefs.map((c) => c.id));
+    // 3. Sort using existing sort utility, then re-pair with visibility.
+    const sortedDefs = applyCardSort(
+      projected.filter((p) => filteredIds.has(p.card.id)).map((p) => p.card),
+      state.owned,
+      state.sort,
+    );
+    const byId = new Map(projected.map((p) => [p.card.id, p]));
+    return sortedDefs.map((c) => byId.get(c.id)!).filter(Boolean);
+  },
+
+  getVisibility: (cardId) => {
+    const card = get().cards.find((c) => c.id === cardId);
+    if (!card) return 'unseen';
+    return getCardVisibility(card, get().owned, get().discovery);
   },
 }));

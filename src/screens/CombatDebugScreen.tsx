@@ -12,6 +12,9 @@ import {
   type RNG,
 } from '@/engine/combat';
 import { MOCK_OPPONENT, MOCK_PLAYER } from '@/engine/combat/mockFighters';
+import { processFightResult, type PostFightSummary } from '@/services/progression/postFight';
+import { xpToNextLevel } from '@/services/progression/xp';
+import { useProgressionStore } from '@/stores/progressionStore';
 import { theme } from '@/themes';
 
 function makeState(seed: number) {
@@ -25,29 +28,49 @@ export function CombatDebugScreen() {
   const [seed, setSeed] = useState(1);
   const [{ state, rng }, setRuntime] = useState<{ state: CombatState; rng: RNG }>(() => makeState(1));
   const [simResult, setSimResult] = useState<string>('');
+  const [summary, setSummary] = useState<PostFightSummary | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const progressionLevel = useProgressionStore((s) => s.level);
+  const progressionXp = useProgressionStore((s) => s.xp);
+  const progressionCoins = useProgressionStore((s) => s.currencies.coins);
+  const progressionStreak = useProgressionStore((s) => s.streak);
+
+  const processIfFinished = async (finalState: CombatState) => {
+    if (!finalState.finished) return;
+    setProcessing(true);
+    try {
+      const result = await processFightResult({ state: finalState, playerId: MOCK_PLAYER.id, seed });
+      setSummary(result);
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   const playerRuntime = state.fighters[MOCK_PLAYER.id];
   const opponentRuntime = state.fighters[MOCK_OPPONENT.id];
 
   const recentEvents = useMemo(() => state.log.slice(-40).reverse(), [state.log]);
 
-  const onStep = () => {
+  const onStep = async () => {
     if (state.finished) return;
     const next = advanceTurn(state, rng);
     setRuntime({ state: next, rng });
+    if (next.finished) await processIfFinished(next);
   };
 
-  const onAutoRun = () => {
+  const onAutoRun = async () => {
     let cur = state;
     while (!cur.finished) {
       cur = advanceTurn(cur, rng);
     }
     setRuntime({ state: cur, rng });
+    await processIfFinished(cur);
   };
 
   const onReset = () => {
     setRuntime(makeState(seed));
     setSimResult('');
+    setSummary(null);
   };
 
   const onReseed = () => {
@@ -55,6 +78,7 @@ export function CombatDebugScreen() {
     setSeed(nextSeed);
     setRuntime(makeState(nextSeed));
     setSimResult('');
+    setSummary(null);
   };
 
   const onSimulate = () => {
@@ -67,9 +91,10 @@ export function CombatDebugScreen() {
     setSimResult(`Wins ${r.wins} • Losses ${r.losses} • Draws ${r.draws} • Avg turns ${(r.totalTurns / 50).toFixed(1)}`);
   };
 
-  const onReplay = () => {
+  const onReplay = async () => {
     const finalState = runMatch({ seed, playerProfile: MOCK_PLAYER, opponentProfile: MOCK_OPPONENT });
     setRuntime({ state: finalState, rng: createRng(seed) });
+    await processIfFinished(finalState);
   };
 
   return (
@@ -118,6 +143,33 @@ export function CombatDebugScreen() {
 
         {simResult ? <AppText style={styles.sim}>{simResult}</AppText> : null}
 
+        <AppCard>
+          <AppText style={styles.name}>Progression</AppText>
+          <AppText>{`Level ${progressionLevel}  •  XP ${progressionXp}/${xpToNextLevel(progressionLevel)}`}</AppText>
+          <AppText>{`Coins ${progressionCoins}  •  Streak ${progressionStreak}`}</AppText>
+        </AppCard>
+
+        {summary ? (
+          <AppCard>
+            <AppText style={styles.name}>{summary.won ? 'Victory!' : 'Defeat'}</AppText>
+            <AppText>{`Turns: ${summary.turns}  •  Winner: ${summary.winnerId ?? 'Draw'}`}</AppText>
+            <AppText>{`XP gained: +${summary.rewards.xp}`}</AppText>
+            <AppText>{`Coins gained: +${summary.rewards.coins}`}</AppText>
+            {summary.levelsGained > 0 ? (
+              <AppText style={styles.levelup}>{`LEVEL UP! +${summary.levelsGained} (${summary.before.level} → ${summary.after.level})`}</AppText>
+            ) : null}
+            <AppText>{`Coins: ${summary.before.coins} → ${summary.after.coins}`}</AppText>
+            <AppText>{`XP: ${summary.before.xp} → ${summary.after.xp}`}</AppText>
+            <AppText>
+              {`Card drops: ${summary.unlockedCardIds.length > 0 ? summary.unlockedCardIds.join(', ') : 'none'}`}
+            </AppText>
+            {summary.newAchievements.length > 0 ? (
+              <AppText style={styles.achievement}>{`Achievements: ${summary.newAchievements.join(', ')}`}</AppText>
+            ) : null}
+          </AppCard>
+        ) : null}
+        {processing ? <AppText>Processing rewards…</AppText> : null}
+
         <AppText style={styles.logHeader}>Combat Log (latest first)</AppText>
         <View style={styles.log}>
           {recentEvents.map((event, idx) => (
@@ -144,4 +196,6 @@ const styles = StyleSheet.create({
   logHeader: { fontWeight: '700', marginBottom: 4 },
   log: { borderWidth: 1, borderColor: '#333', borderRadius: 8, padding: 8, gap: 4 },
   logLine: { fontSize: 12 },
+  levelup: { fontWeight: '700', color: theme.colors.warning },
+  achievement: { fontWeight: '700', color: '#7cc4ff' },
 });

@@ -65,6 +65,8 @@ export type CardFilter = {
   ownedOnly?: boolean;
 };
 
+export type CardVisibility = 'unseen' | 'discovered' | 'owned';
+
 export type CardSort =
   | 'rarity'
   | 'damage'
