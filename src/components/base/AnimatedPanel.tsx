@@ -1,15 +1,17 @@
-import { PropsWithChildren, useEffect } from 'react';
-import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
-import { fadeIn } from '@/animations/transitions';
+import { PropsWithChildren, useEffect, useRef } from 'react';
+import { Animated } from 'react-native';
+import { animationDurations } from '@/animations/transitions';
 
 export function AnimatedPanel({ children }: PropsWithChildren) {
-  const opacity = useSharedValue(0);
+  const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    opacity.value = fadeIn();
+    Animated.timing(opacity, {
+      toValue: 1,
+      duration: animationDurations.normal,
+      useNativeDriver: true,
+    }).start();
   }, [opacity]);
 
-  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
-
-  return <Animated.View style={style}>{children}</Animated.View>;
+  return <Animated.View style={{ opacity }}>{children}</Animated.View>;
 }

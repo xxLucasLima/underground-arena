@@ -1,4 +1,3 @@
-import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
 import type { RootStackParamList } from '@/types/navigation';
 
 type ScreenConfig = {
@@ -27,5 +26,3 @@ export const screenTitleMap: Record<keyof RootStackParamList, string> = screenRe
   },
   {} as Record<keyof RootStackParamList, string>,
 );
-
-export const placeholderComponent = PlaceholderScreen;
