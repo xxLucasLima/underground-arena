@@ -21,6 +21,7 @@ export function PlaceholderScreen({ route, navigation }: Props) {
             <AppButton label="Card Collection" onPress={() => navigation.navigate('CardCollection')} />
             <AppButton label="Deck Builder" onPress={() => navigation.navigate('DeckBuilder')} />
             <AppButton label="Open Pack" onPress={() => navigation.navigate('PackOpening', { packType: 'Bronze' })} />
+            <AppButton label="Combat Debug" onPress={() => navigation.navigate('CombatDebug')} />
           </View>
         ) : null}
       </View>

@@ -9,6 +9,7 @@ export type RootStackParamList = {
   PackOpening: { packType?: PackType } | undefined;
   DeckBuilder: undefined;
   Fight: undefined;
+  CombatDebug: undefined;
   Rewards: undefined;
   Shop: undefined;
   Tournament: undefined;

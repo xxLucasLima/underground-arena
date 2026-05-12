@@ -1,6 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { CardCollectionScreen } from '@/screens/CardCollectionScreen';
 import { CardDetailsScreen } from '@/screens/CardDetailsScreen';
+import { CombatDebugScreen } from '@/screens/CombatDebugScreen';
 import { DeckBuilderScreen } from '@/screens/DeckBuilderScreen';
 import { PackOpeningScreen } from '@/screens/PackOpeningScreen';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
@@ -25,6 +26,7 @@ export function RootNavigator() {
       <Stack.Screen name="CardCollection" component={CardCollectionScreen} options={{ title: 'Card Collection' }} />
       <Stack.Screen name="DeckBuilder" component={DeckBuilderScreen} options={{ title: 'Deck Builder' }} />
       <Stack.Screen name="Fight" component={PlaceholderScreen} options={{ title: 'Fight Screen' }} />
+      <Stack.Screen name="CombatDebug" component={CombatDebugScreen} options={{ title: 'Combat Debug' }} />
       <Stack.Screen name="Rewards" component={PlaceholderScreen} options={{ title: 'Rewards Screen' }} />
       <Stack.Screen name="Shop" component={PlaceholderScreen} options={{ title: 'Shop' }} />
       <Stack.Screen name="Tournament" component={PlaceholderScreen} options={{ title: 'Tournament' }} />
